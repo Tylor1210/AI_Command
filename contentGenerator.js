@@ -1,14 +1,14 @@
 require('dotenv').config();
 const { OpenAI } = require('openai');
-const Airtable = require('airtable'); 
-const SocialMediaAPI = require('social-media-api'); 
+const Airtable = require('airtable');
+const { postToAyrshare } = require('./ayrshare');
 
 // --- Initialize Clients ---
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const airtable = new Airtable({ apiKey: process.env.AIRTABLE_PAT }).base(
     process.env.AIRTABLE_BASE_ID
 );
-const social = new SocialMediaAPI(process.env.AYRSHARE_API_KEY);
+
 // --------------------------
 
 // Configuration
@@ -63,12 +63,12 @@ async function generateAndStorePosts() {
                         "Image Concept": post.imageConcept,
                         "Post Type": post.postType,
                         "Image URL": imageUrl, // <--- DALL-E URL SAVED HERE
-                        "AI Status": "Generated - Needs Review" 
+                        "AI Status": "Generated - Needs Review"
                     }
                 });
             }
         }
-        
+
         // This is the Airtable push step that used to be separate
         await airtable(AIRTABLE_CONTENT_TABLE).create(recordsToCreate);
         console.log(`✅ ${recordsToCreate.length} new posts (with DALL-E images) pushed to Airtable for review!`);
@@ -85,79 +85,86 @@ async function generateAndStorePosts() {
 async function scheduleAndSendPosts() {
     console.log("\n[2/2] Checking Airtable for posts ready to schedule...");
 
-    // Filter posts where Status is 'Ready to Post'
     const records = await airtable(AIRTABLE_CONTENT_TABLE)
-        .select({
-            filterByFormula: "{AI Status} = 'Ready to Post'", 
-            maxRecords: 5 
-        })
+        .select({ filterByFormula: "{AI Status} = 'Ready to Post'", maxRecords: 5 })
         .firstPage();
 
-    if (records.length === 0) {
-        console.log("No posts found with 'Ready to Post' status.");
-        return;
-    }
-
-    console.log(`Found ${records.length} posts to publish...`);
+    if (!records.length) return console.log("No posts ready.");
 
     for (const record of records) {
         const platform = record.get('Platform');
         const caption = record.get('Caption');
         const postType = record.get('Post Type');
         const recordId = record.id;
-        
-        // --- NEW: Retrieve the DALL-E URL from the record ---
-        const imageURL = record.get('Image URL'); 
-        
+        const imageUrl = record.get('Image URL');
+
+        console.log('Publishing record:', recordId);
+        console.log(' platform:', platform);
+        console.log(' postType:', postType);
+        console.log(' caption (raw):', JSON.stringify(caption));
+        console.log(' imageUrl (raw):', JSON.stringify(imageUrl));
+
+
         try {
-            if (!imageURL || record.get('AI Status') !== 'Ready to Post') continue; 
+            // Clean caption before publishing
+            let cleanCaption = "";
 
-            // 1. Prepare the base post payload
-            let postPayload = {
-                post: caption,
-                platforms: [platform.toLowerCase()],
-                mediaUrls: [imageURL], // <--- USING THE DALL-E URL HERE
-            };
-
-            // 2. Adjust payload specifically for Instagram Story
-            if (platform === 'Instagram' && postType === 'Story') {
-                console.log(`Adapting post for Instagram Story format...`);
-                postPayload.instagramOptions = {
-                    stories: true 
-                };
+            if (typeof caption === "string" && caption.trim() !== "") {
+                cleanCaption = caption
+                    .replace(/\\"/g, '"')
+                    .replace(/\\n/g, '\n')
+                    .trim();
             }
-            
-            // 3. Publish the Post using the unified scheduler
-            const postResponse = await social.post(postPayload);
 
-            // 4. Update Airtable to mark as sent
-            await airtable(AIRTABLE_CONTENT_TABLE).update([
-                {
-                    id: recordId,
-                    fields: {
-                        "Posted": true, 
-                        "AI Status": "Published",
-                        "Post ID": postResponse.postIds ? postResponse.postIds.join(',') : 'N/A'
-                    },
-                },
-            ]);
+            if (!cleanCaption) {
+                cleanCaption = "Check out this post!"; // FINAL FALLBACK
+            }
 
-            console.log(`✅ Published to ${platform} as a ${postType}. Status updated in Airtable.`);
+            // Append timestamp and random string to ensure uniqueness for retries/testing
+            const randomStr = Math.random().toString(36).substring(2, 8);
+            cleanCaption += ` [${new Date().toLocaleTimeString()}-${randomStr}]`;
 
-        } catch (error) {
-            console.error(`❌ Failed to publish post ${recordId} to ${platform}.`, error.message);
+            console.log(" cleanCaption (FINAL):", cleanCaption);
+
+            // Validation: Instagram requires an image
+            if (platform.toLowerCase() === 'instagram' && (!imageUrl || typeof imageUrl !== 'string' || imageUrl.trim() === '')) {
+                console.error(`❌ Skipping ${recordId}: Instagram requires an image.`);
+                await airtable(AIRTABLE_CONTENT_TABLE).update([
+                    { id: recordId, fields: { 'AI Status': 'Error - Missing Image' } }
+                ]);
+                continue;
+            }
+
+            const result = await postToAyrshare(
+                platform,
+                cleanCaption,
+                (imageUrl && typeof imageUrl === 'string' && imageUrl.trim() !== '') ? imageUrl : null,
+                postType
+            );
+
+            if (result.success) {
+                await airtable(AIRTABLE_CONTENT_TABLE).update([
+                    { id: recordId, fields: { Posted: true, 'AI Status': 'Published', 'Post ID': result.data.id } }
+                ]);
+                console.log(`✅ Published ${platform} ${postType}: ${caption}`);
+            } else {
+                console.error(`❌ Failed to publish ${recordId}:`, result.error);
+            }
+
+        } catch (err) {
+            console.error(`❌ Exception for ${recordId}:`, err.message);
         }
     }
 }
 // === FUNCTION C: GENERATE IMAGE USING DALL-E ===
 async function generateImage(imageConcept, postType) {
     console.log(`\n    -> Generating image for: "${imageConcept}"`);
-    
+
     // Set size based on Post Type
     // 'Story' requires 1024x1792 (vertical 9:16)
     // 'Feed Post' uses 1024x1024 (square)
     const size = (postType === 'Story') ? "1024x1792" : "1024x1024";
-    
+
     const prompt = `Create a high-quality, professional image for an AI Automation Agency. The visual concept is: "${imageConcept}". Maintain a clean, high-tech, and professional aesthetic.`;
 
     try {
@@ -166,13 +173,13 @@ async function generateImage(imageConcept, postType) {
             prompt: prompt,
             n: 1,
             size: size,
-            response_format: "url", 
+            response_format: "url",
         });
 
         const imageUrl = imageResponse.data[0].url;
         console.log(`    -> ✅ Image generated successfully.`);
         // Note: DALL-E URLs are temporary. This is fine for testing.
-        return imageUrl; 
+        return imageUrl;
 
     } catch (error) {
         console.error("    -> ❌ DALL-E Image Generation Failed:", error.message);
@@ -188,9 +195,9 @@ async function main() {
 
     // NOTE: A human must manually change the 'AI Status' in Airtable from 
     // 'Generated - Needs Review' to 'Ready to Post' before the next step will send it.
-    
+
     // 2. Schedule and send content (consumes social scheduler credits)
-    await scheduleAndSendPosts(); 
+    await scheduleAndSendPosts();
 }
 module.exports = {
     generateAndStorePosts,
