@@ -192,5 +192,13 @@ async function main() {
     // 2. Schedule and send content (consumes social scheduler credits)
     await scheduleAndSendPosts(); 
 }
+module.exports = {
+    generateAndStorePosts,
+    scheduleAndSendPosts,
+    generateImage
+};
 
-main();
+// Only run main() if this file is executed directly
+if (require.main === module) {
+    main();
+}

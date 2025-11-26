@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { api } from './api';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, collection, query, onSnapshot, updateDoc } from 'firebase/firestore';
@@ -545,54 +546,41 @@ const Dashboard = () => {
     }, []);
 
     const handleSaveEdit = useCallback(async (updatedPost) => {
-        if (!db || !userId || !updatedPost.id) {
-            console.error("Cannot save: DB not ready or post ID missing.");
-            throw new Error("Initialization error.");
+    if (!updatedPost.id) {
+        console.error("Cannot save: post ID missing.");
+        throw new Error("Post ID missing.");
+    }
+
+    try {
+        // Call your API instead of Firebase
+        const result = await api.updatePost(updatedPost.id, updatedPost);
+        
+        if (result.success) {
+            console.log(`Successfully updated post ${updatedPost.id}`);
+            // Optimistic UI update
+            setPosts(prev => prev.map(p => p.id === updatedPost.id ? { ...p, ...updatedPost } : p));
+        } else {
+            throw new Error(result.message || 'Update failed');
         }
-
-        try {
-            const updateFields = {
-                caption: updatedPost.caption,
-                imageConcept: updatedPost.imageConcept,
-                imageUrl: updatedPost.imageUrl, 
-                imageOptions: updatedPost.imageOptions,
-                platform: updatedPost.platform,
-                postType: updatedPost.postType,
-                aiStatus: updatedPost.aiStatus,
-                isRecurring: updatedPost.isRecurring,
-                repeatDay: updatedPost.repeatDay,
-                lastEdited: new Date().toISOString(),
-            };
-            
-            const postRef = doc(db, `artifacts/${appId}/users/${userId}/staged_posts`, updatedPost.id);
-            await updateDoc(postRef, updateFields);
-            
-            console.log(`Successfully updated post ${updatedPost.id} and saved to Firestore.`);
-
-            setPosts(prev => prev.map(p => p.id === updatedPost.id ? { ...p, ...updateFields } : p)); 
-
-        } catch (error) {
-            console.error("Failed to save edited post:", error);
-            throw error; 
-        }
-    }, [db, userId]);
+    } catch (error) {
+        console.error("Failed to save edited post:", error);
+        throw error; 
+    }
+}, []);
 
     const handleUpdateStatus = useCallback(async (postId, newStatus) => {
-        if (!db || !userId) return;
-
-        try {
-            const postRef = doc(db, `artifacts/${appId}/users/${userId}/staged_posts`, postId);
-            await updateDoc(postRef, {
-                aiStatus: newStatus,
-            });
+    try {
+        const result = await api.updatePostStatus(postId, newStatus);
+        
+        if (result.success) {
             console.log(`Successfully updated status for ${postId} to ${newStatus}.`);
-
-            setPosts(prev => prev.map(p => p.id === postId ? { ...p, aiStatus: newStatus } : p)); 
-
-        } catch (error) {
-            console.error("Failed to update post status in Firestore:", error);
+            // Optimistic UI update
+            setPosts(prev => prev.map(p => p.id === postId ? { ...p, aiStatus: newStatus } : p));
         }
-    }, [db, userId]);
+    } catch (error) {
+        console.error("Failed to update post status:", error);
+    }
+}, []);
 
     if (!isAuthReady) {
         return (
