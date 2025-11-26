@@ -1,0 +1,20 @@
+{
+  "name": "ai_command",
+  "version": "1.0.0",
+  "description": "",
+  "main": "chatbotQualifiers.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "airtable": "^0.12.2",
+    "dotenv": "^17.2.3",
+    "nodemailer": "^7.0.10",
+    "openai": "^6.9.1",
+    "social-media-api": "^1.2.6",
+    "social-post-api": "^1.1.1"
+  }
+}

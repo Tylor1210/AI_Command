@@ -8,7 +8,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const airtable = new Airtable({ apiKey: process.env.AIRTABLE_PAT }).base(
     process.env.AIRTABLE_BASE_ID
 );
-const social = new SocialMediaAPI(process.env.SOCIAL_SCHEDULER_API_KEY); 
+const social = new SocialMediaAPI(process.env.AYRSHARE_API_KEY);
 // --------------------------
 
 // Configuration
