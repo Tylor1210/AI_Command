@@ -1,2 +1,8 @@
 # Ignore all environment variable files
 .env
+node_modules
+
+# Ignore test files
+test_media_handling.js
+test_story_payload.js
+
