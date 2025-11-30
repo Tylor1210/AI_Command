@@ -6,6 +6,10 @@ import { RefreshCw, Edit, Send, Repeat, Plus, Zap, Trash2, Clock, CheckCircle, S
 import ThemeToggle from './components/ThemeToggle';
 import StatsCard from './components/StatsCard';
 import LoadingSpinner from './components/LoadingSpinner';
+import { getFirestore } from 'firebase/firestore';
+import { Sparkles, Settings } from 'lucide-react';
+import AutopilotView from './components/AutopilotView';
+import SettingsView from './components/SettingsView';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -437,6 +441,11 @@ const Dashboard = () => {
         return localStorage.getItem('theme') || 'dark';
     });
 
+    // 'Dashboard' | 'Autopilot' | 'Settings'
+    const [currentView, setCurrentView] = useState('Dashboard');
+    // Set to true to test paid features66
+    const [isPaidUser, setIsPaidUser] = useState(false);
+
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme);
         localStorage.setItem('theme', theme);
@@ -458,6 +467,7 @@ const Dashboard = () => {
             const firebaseAuth = getAuth(firebaseApp);
 
             setAuth(firebaseAuth);
+            const db = getFirestore(firebaseApp);
 
             const attemptSignIn = async () => {
                 try {
@@ -648,8 +658,8 @@ const Dashboard = () => {
                 <button
                     onClick={() => setActiveTab('queue')}
                     className={`pb-2 px-4 text-sm font-medium transition-colors relative ${activeTab === 'queue'
-                            ? 'text-indigo-600 border-b-2 border-indigo-600'
-                            : 'text-gray-500 hover:text-gray-700'
+                        ? 'text-indigo-600 border-b-2 border-indigo-600'
+                        : 'text-gray-500 hover:text-gray-700'
                         }`}
                 >
                     <div className="flex items-center space-x-2">
@@ -663,8 +673,8 @@ const Dashboard = () => {
                 <button
                     onClick={() => setActiveTab('previous')}
                     className={`pb-2 px-4 text-sm font-medium transition-colors relative ${activeTab === 'previous'
-                            ? 'text-indigo-600 border-b-2 border-indigo-600'
-                            : 'text-gray-500 hover:text-gray-700'
+                        ? 'text-indigo-600 border-b-2 border-indigo-600'
+                        : 'text-gray-500 hover:text-gray-700'
                         }`}
                 >
                     <div className="flex items-center space-x-2">

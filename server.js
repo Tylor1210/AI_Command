@@ -24,20 +24,20 @@ const AIRTABLE_CONTENT_TABLE = "Social Media Posts";
 // ====================================
 app.post('/api/generate-posts', async (req, res) => {
     console.log('📝 API Request: Generate new posts...');
-    
+
     try {
         const count = await generateAndStorePosts();
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             message: `Successfully generated ${count} new post(s)!`,
             count: count
         });
     } catch (error) {
         console.error('❌ Error generating posts:', error);
-        res.status(500).json({ 
-            success: false, 
+        res.status(500).json({
+            success: false,
             message: 'Failed to generate posts',
-            error: error.message 
+            error: error.message
         });
     }
 });
@@ -47,19 +47,19 @@ app.post('/api/generate-posts', async (req, res) => {
 // ====================================
 app.post('/api/publish-posts', async (req, res) => {
     console.log('📤 API Request: Publish ready posts...');
-    
+
     try {
         await scheduleAndSendPosts();
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             message: 'Publishing process completed!'
         });
     } catch (error) {
         console.error('❌ Error publishing posts:', error);
-        res.status(500).json({ 
-            success: false, 
+        res.status(500).json({
+            success: false,
             message: 'Failed to publish posts',
-            error: error.message 
+            error: error.message
         });
     }
 });
@@ -69,12 +69,11 @@ app.post('/api/publish-posts', async (req, res) => {
 // ====================================
 app.get('/api/posts', async (req, res) => {
     console.log('📋 API Request: Fetch all posts...');
-    
+
     try {
         const records = await airtable(AIRTABLE_CONTENT_TABLE)
             .select({
-                maxRecords: 100,
-                sort: [{ field: "Created", direction: "desc" }]
+                maxRecords: 100
             })
             .firstPage();
 
@@ -90,20 +89,21 @@ app.get('/api/posts', async (req, res) => {
             repeatDay: record.get('Repeat Day') || 'N/A',
             posted: record.get('Posted') || false,
             postId: record.get('Post ID') || null,
+            scheduledDate: record.get('Scheduled Date') || null,
             imageOptions: record.get('Image Options') || []
         }));
 
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             posts: posts,
             count: posts.length
         });
     } catch (error) {
         console.error('❌ Error fetching posts:', error);
-        res.status(500).json({ 
-            success: false, 
+        res.status(500).json({
+            success: false,
             message: 'Failed to fetch posts',
-            error: error.message 
+            error: error.message
         });
     }
 });
@@ -114,9 +114,9 @@ app.get('/api/posts', async (req, res) => {
 app.patch('/api/posts/:id/status', async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
-    
+
     console.log(`🔄 API Request: Update post ${id} status to ${status}...`);
-    
+
     try {
         await airtable(AIRTABLE_CONTENT_TABLE).update([
             {
@@ -127,16 +127,16 @@ app.patch('/api/posts/:id/status', async (req, res) => {
             }
         ]);
 
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             message: `Post status updated to: ${status}`
         });
     } catch (error) {
         console.error('❌ Error updating post status:', error);
-        res.status(500).json({ 
-            success: false, 
+        res.status(500).json({
+            success: false,
             message: 'Failed to update post status',
-            error: error.message 
+            error: error.message
         });
     }
 });
@@ -147,9 +147,9 @@ app.patch('/api/posts/:id/status', async (req, res) => {
 app.put('/api/posts/:id', async (req, res) => {
     const { id } = req.params;
     const postData = req.body;
-    
+
     console.log(`✏️ API Request: Update post ${id}...`);
-    
+
     try {
         const updateFields = {
             "Caption": postData.caption,
@@ -159,7 +159,8 @@ app.put('/api/posts/:id', async (req, res) => {
             "Post Type": postData.postType,
             "AI Status": postData.aiStatus,
             "Is Recurring": postData.isRecurring,
-            "Repeat Day": postData.repeatDay
+            "Repeat Day": postData.repeatDay,
+            "Scheduled Date": postData.scheduledDate
         };
 
         if (postData.imageOptions) {
@@ -173,16 +174,16 @@ app.put('/api/posts/:id', async (req, res) => {
             }
         ]);
 
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             message: 'Post updated successfully!'
         });
     } catch (error) {
         console.error('❌ Error updating post:', error);
-        res.status(500).json({ 
-            success: false, 
+        res.status(500).json({
+            success: false,
             message: 'Failed to update post',
-            error: error.message 
+            error: error.message
         });
     }
 });
@@ -192,9 +193,9 @@ app.put('/api/posts/:id', async (req, res) => {
 // ====================================
 app.post('/api/posts', async (req, res) => {
     const postData = req.body;
-    
+
     console.log('➕ API Request: Create new manual post...');
-    
+
     try {
         const records = await airtable(AIRTABLE_CONTENT_TABLE).create([
             {
@@ -206,22 +207,23 @@ app.post('/api/posts', async (req, res) => {
                     "Image URL": postData.imageUrl || "https://placehold.co/1024x1024/333333/ffffff?text=Manual+Post",
                     "AI Status": "Generated - Needs Review",
                     "Is Recurring": postData.isRecurring || false,
-                    "Repeat Day": postData.repeatDay || "N/A"
+                    "Repeat Day": postData.repeatDay || "N/A",
+                    "Scheduled Date": postData.scheduledDate || null
                 }
             }
         ]);
 
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             message: 'Manual post created successfully!',
             postId: records[0].id
         });
     } catch (error) {
         console.error('❌ Error creating manual post:', error);
-        res.status(500).json({ 
-            success: false, 
+        res.status(500).json({
+            success: false,
             message: 'Failed to create manual post',
-            error: error.message 
+            error: error.message
         });
     }
 });
@@ -231,9 +233,9 @@ app.post('/api/posts', async (req, res) => {
 // ====================================
 app.delete('/api/posts/:id', async (req, res) => {
     const { id } = req.params;
-    
+
     console.log(`🗑️ API Request: Archive post ${id}...`);
-    
+
     try {
         await airtable(AIRTABLE_CONTENT_TABLE).update([
             {
@@ -244,16 +246,16 @@ app.delete('/api/posts/:id', async (req, res) => {
             }
         ]);
 
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             message: 'Post archived successfully!'
         });
     } catch (error) {
         console.error('❌ Error archiving post:', error);
-        res.status(500).json({ 
-            success: false, 
+        res.status(500).json({
+            success: false,
             message: 'Failed to archive post',
-            error: error.message 
+            error: error.message
         });
     }
 });
@@ -262,8 +264,8 @@ app.delete('/api/posts/:id', async (req, res) => {
 // Health Check Endpoint
 // ====================================
 app.get('/api/health', (req, res) => {
-    res.json({ 
-        status: 'ok', 
+    res.json({
+        status: 'ok',
         message: 'AI Automation API Server is running!',
         timestamp: new Date().toISOString()
     });
